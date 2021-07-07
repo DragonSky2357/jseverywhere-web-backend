@@ -5,27 +5,43 @@ module.exports = {
   note: async (parent, args, { models }) => {
     return await models.Note.findById(args.id);
   },
+  user: async (parent, args, { models }) => {
+    return await models.User.findOne({ username: args.username });
+  },
+  users: async (parent, args, { models }) => {
+    return await models.User.find({}).limit(100);
+  },
+  me: async (parent, args, { models, user }) => {
+    return await models.User.findById(user.id);
+  },
   noteFeed: async (parent, { cursor }, { models }) => {
+    // hard code the limit to 10 items
     const limit = 10;
+    // set the default hasNextPage value to false
     let hasNextPage = false;
-
-    // 전달된 cursor가 없으면 기본 query는 빈 배열 할당
-    // 이를 통해 DB에서 최신 노트 목록을 당겨오게 됨
+    // if no cursor is passed the default query will be empty
+    // this will pull the newest notes from the db
     let cursorQuery = {};
 
-    // 쿼리가 cursor 미만의 ObjectId를 가진 노트를 탐색
-    if (cursor) cursorQuery = { _id: { $lt: cursor } };
+    // if there is a cursor
+    // our query will look for notes with an ObjectId less than that of the cursor
+    if (cursor) {
+      cursorQuery = { _id: { $lt: cursor } };
+    }
 
-    // DB에서 limit+1개의 노트를 탐색하고 최신순으로 정렬
+    // find the limit + 1 of notes in our db, sorted newest to oldest
     let notes = await models.Note.find(cursorQuery)
       .sort({ _id: -1 })
       .limit(limit + 1);
 
+    // if the number of notes we find exceeds our limit
+    // set hasNextPage to true & trim the notes to the limit
     if (notes.length > limit) {
       hasNextPage = true;
       notes = notes.slice(0, -1);
     }
 
+    // the new cursor will be the Mongo ObjectID of the last item in the feed array
     const newCursor = notes[notes.length - 1]._id;
 
     return {
@@ -33,14 +49,5 @@ module.exports = {
       cursor: newCursor,
       hasNextPage
     };
-  },
-  user: async (parent, { username }, { models }) => {
-    return await models.User.findOne({ username });
-  },
-  users: async (parent, args, { models }) => {
-    return await models.User.find({});
-  },
-  me: async (parent, args, { models, user }) => {
-    return await models.User.findById(user.id);
   }
 };
